@@ -13,8 +13,8 @@ local horse = {
 }
 
 local floor = { x = 0, y = 500, w = 960, h = 40 }
-local wall = { x = 700, y = 200, w = 24, h = 300 }
-local wall2 = { x = 450, y = 200, w = 24, h = 200 }
+local wall = { x = 700, y = 200, w = 24, h = 250 }
+local wall2 = { x = 560, y = 200, w = 24, h = 200 }
 
 local GRAVITY = 1400
 local MOVE_SPEED = 400
@@ -23,10 +23,15 @@ local WALL_SLIDE_MAX_SPEED = 120
 local WALL_JUMP_VELOCITY_X = 340
 local WALL_JUMP_VELOCITY_Y = -480
 local SLIDE_SPEED = 500
+local SLIDE_DURATION = 0.4
+local COYOTE_TIME = 0.1
+local JUMP_BUFFER_TIME = 0.12
 
 local grounded = false
 local wallDir = 0 -- -1 for left wall, 1 for right wall, 0 for no wall
-local jumpPressed = false -- set true for one frame when space is hit
+
+local coyoteTimer = 0
+local jumpBufferTimer = 0
 
 local function applyHorizontalInput()
     horse.vx = 0
@@ -61,6 +66,15 @@ local function moveAndCollide(dt)
     end
 end
 
+local function wantsJump()
+    return jumpBufferTimer > 0
+end
+
+local function consumeJump()
+    jumpBufferTimer = 0
+end
+
+
 local states = {
     idle = {
         update = function(dt, sm)
@@ -69,8 +83,11 @@ local states = {
             moveAndCollide(dt)
             if not grounded then
                 sm:change("fall")
-            elseif jumpPressed then
+            elseif wantsJump() then
+                consumeJump()
                 sm:change("jump")
+            elseif love.keyboard.isDown("down", "s") then
+                sm:change("slide")
             elseif horse.vx ~= 0 then
                 sm:change("run")
             end
@@ -83,8 +100,11 @@ local states = {
             moveAndCollide(dt)
             if not grounded then
                 sm:change("fall")
-            elseif jumpPressed then
+            elseif wantsJump() then
+                consumeJump()
                 sm:change("jump")
+            elseif love.keyboard.isDown("down", "s") then
+                sm:change("slide")
             elseif horse.vx == 0 then
                 sm:change("idle")
             end
@@ -103,6 +123,7 @@ local states = {
             end
         end
     },
+
     fall = {
         update = function(dt, sm)
             applyHorizontalInput()
@@ -111,7 +132,11 @@ local states = {
             if grounded then
                 sm:change(horse.vx == 0 and "idle" or "run")
             elseif wallDir ~= 0 and horse.vy > 0 then
-                sm:change("wallslide") 
+                sm:change("wallslide")
+            elseif wantsJump() and coyoteTimer > 0 then
+                consumeJump()
+                coyoteTimer = 0
+                sm:change("jump")
             end
         end
     },
@@ -125,7 +150,8 @@ local states = {
                 sm:change("idle")
             elseif wallDir == 0 then
                 sm:change("fall")
-            elseif jumpPressed then
+            elseif wantsJump() then
+                consumeJump()
                 sm:change("walljump")
             end
         end
@@ -144,6 +170,29 @@ local states = {
                 sm:change("fall")
             end
         end
+    },
+
+    slide = {
+        enter = function(_, _, sm)
+            horse.vx = horse.facing * SLIDE_SPEED
+        end,
+        update = function(dt, sm)
+            horse.vy = horse.vy + GRAVITY * dt
+            moveAndCollide(dt)
+
+            local decel = (SLIDE_SPEED / SLIDE_DURATION) * dt
+            if horse.vx > 0 then
+                horse.vx = math.max(horse.vx - decel, 0)
+            elseif horse.vx < 0 then
+                horse.vx = math.min(horse.vx + decel, 0)
+            end
+
+            if not grounded then
+                sm:change("fall")
+            elseif not love.keyboard.isDown("down", "s") then
+                sm:change(math.abs(horse.vx) > 10 and "run" or "idle")
+            end
+        end
     }
 }
 
@@ -159,14 +208,20 @@ function love.load()
     sm = StateMachine.new(states, "fall")
 end
 
-function love.update(dt)    
+function love.update(dt)
+    if grounded then
+        coyoteTimer = COYOTE_TIME
+    else
+        coyoteTimer = math.max(coyoteTimer - dt, 0)
+    end
+    jumpBufferTimer = math.max(jumpBufferTimer - dt, 0)
+
     sm:update(dt)
-    jumpPressed = false
 end
 
 function love.keypressed(key)
     if key == "space" then
-        jumpPressed = true
+        jumpBufferTimer = JUMP_BUFFER_TIME
     end
 end
 
@@ -182,4 +237,6 @@ function love.draw()
     love.graphics.setColor(1, 1, 1)
     love.graphics.print("state: " .. sm.current, 10, 10)
     love.graphics.print("wallDir: " .. tostring(wallDir), 10, 30)
+    love.graphics.print("coyote: " .. string.format("%.2f", coyoteTimer), 10, 50)
+    love.graphics.print("buffer: " .. string.format("%.2f", jumpBufferTimer), 10, 70)
 end
