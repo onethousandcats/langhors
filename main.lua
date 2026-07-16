@@ -7,20 +7,25 @@ local world
 
 local horse = {
     x = 100, y = 300,
-    w = 40, h = 20,
+    w = 20, h = 20,
     vx = 0, vy = 0,
     facing = 1
 }
 
 local floor = { x = 0, y = 500, w = 960, h = 40 }
 local wall = { x = 700, y = 200, w = 24, h = 300 }
+local wall2 = { x = 450, y = 200, w = 24, h = 200 }
 
 local GRAVITY = 1400
 local MOVE_SPEED = 400
 local JUMP_VELOCITY = -520
+local WALL_SLIDE_MAX_SPEED = 120
+local WALL_JUMP_VELOCITY_X = 340
+local WALL_JUMP_VELOCITY_Y = -480
+local SLIDE_SPEED = 500
 
 local grounded = false
-local wallDir = 0 -- -1 = left, 1 = right, 0
+local wallDir = 0 -- -1 for left wall, 1 for right wall, 0 for no wall
 local jumpPressed = false -- set true for one frame when space is hit
 
 local function applyHorizontalInput()
@@ -35,7 +40,6 @@ local function applyHorizontalInput()
 end
 
 local function moveAndCollide(dt)
-    horse.vy = horse.vy + GRAVITY * dt
     local goalX = horse.x + horse.vx * dt
     local goalY = horse.y + horse.vy * dt
 
@@ -61,6 +65,7 @@ local states = {
     idle = {
         update = function(dt, sm)
             applyHorizontalInput()
+            horse.vy = horse.vy + GRAVITY * dt
             moveAndCollide(dt)
             if not grounded then
                 sm:change("fall")
@@ -74,6 +79,7 @@ local states = {
     run = {
         update = function(dt, sm)
             applyHorizontalInput()
+            horse.vy = horse.vy + GRAVITY * dt
             moveAndCollide(dt)
             if not grounded then
                 sm:change("fall")
@@ -90,6 +96,7 @@ local states = {
         end,
         update = function(dt, sm)
             applyHorizontalInput()
+            horse.vy = horse.vy + GRAVITY * dt
             moveAndCollide(dt)
             if horse.vy >= 0 then
                 sm:change("fall")
@@ -99,12 +106,45 @@ local states = {
     fall = {
         update = function(dt, sm)
             applyHorizontalInput()
+            horse.vy = horse.vy + GRAVITY * dt
             moveAndCollide(dt)
             if grounded then
                 sm:change(horse.vx == 0 and "idle" or "run")
+            elseif wallDir ~= 0 and horse.vy > 0 then
+                sm:change("wallslide") 
             end
         end
     },
+
+    wallslide = {
+        update = function(dt, sm)
+            horse.vy = math.min(horse.vy + GRAVITY * dt, WALL_SLIDE_MAX_SPEED)
+            moveAndCollide(dt)
+
+            if grounded then
+                sm:change("idle")
+            elseif wallDir == 0 then
+                sm:change("fall")
+            elseif jumpPressed then
+                sm:change("walljump")
+            end
+        end
+    },
+
+    walljump = {
+        enter = function()
+            horse.vx = -wallDir * WALL_JUMP_VELOCITY_X
+            horse.vy = WALL_JUMP_VELOCITY_Y
+            horse.facing = -wallDir
+        end,
+        update = function(dt, sm)
+            horse.vy = horse.vy + GRAVITY * dt
+            moveAndCollide(dt)
+            if horse.vy >= 0 then
+                sm:change("fall")
+            end
+        end
+    }
 }
 
 local sm
@@ -114,6 +154,7 @@ function love.load()
     world:add(horse, horse.x, horse.y, horse.w, horse.h)
     world:add(floor, floor.x, floor.y, floor.w, floor.h)
     world:add(wall, wall.x, wall.y, wall.w, wall.h)
+    world:add(wall2, wall2.x, wall2.y, wall2.w, wall2.h)
 
     sm = StateMachine.new(states, "fall")
 end
@@ -133,10 +174,12 @@ function love.draw()
     love.graphics.setColor(0.3, 0.3, 0.4)
     love.graphics.rectangle("fill", floor.x, floor.y, floor.w, floor.h)
     love.graphics.rectangle("fill", wall.x, wall.y, wall.w, wall.h)
+    love.graphics.rectangle("fill", wall2.x, wall2.y, wall2.w, wall2.h)
 
     love.graphics.setColor(0.85, 0.7, 0.5)
     love.graphics.rectangle("fill", horse.x, horse.y, horse.w, horse.h)
 
-love.graphics.setColor(1, 1, 1)
+    love.graphics.setColor(1, 1, 1)
     love.graphics.print("state: " .. sm.current, 10, 10)
+    love.graphics.print("wallDir: " .. tostring(wallDir), 10, 30)
 end
