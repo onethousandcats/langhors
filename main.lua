@@ -12,6 +12,8 @@ local horse = {
     facing = 1
 }
 
+local gamepad = nil
+
 -- Level layout as a flat list of solid rectangles. Everything in here gets
 -- added to the bump world and drawn the same way, so growing the level from
 -- here is just adding entries -- no new named variables needed.
@@ -47,6 +49,7 @@ local SLIDE_SPEED = 500
 local SLIDE_DURATION = 0.4
 local COYOTE_TIME = 0.1
 local JUMP_BUFFER_TIME = 0.12
+local GAMEPAD_DEADZONE = 0.25
 
 local camera = { x = 0, y = 0 }
 local CAMERA_SMOOTH = 6
@@ -59,12 +62,22 @@ local jumpBufferTimer = 0
 
 local function applyHorizontalInput()
     horse.vx = 0
+    
+    local input = 0
     if love.keyboard.isDown("left", "a") then
-        horse.vx = -MOVE_SPEED
-        horse.facing = -1
+        input = -1
     elseif love.keyboard.isDown("right", "d") then
-        horse.vx = MOVE_SPEED
-        horse.facing = 1
+        input = 1
+    elseif gamepad then
+        local axisX = gamepad:getGamepadAxis("leftx")
+        if math.abs(axisX) > GAMEPAD_DEADZONE then
+            input = axisX
+        end
+    end
+
+    if input ~= 0 then
+        horse.facing = input > 0 and 1 or -1
+        horse.vx = input * MOVE_SPEED
     end
 end
 
@@ -90,6 +103,23 @@ local function moveAndCollide(dt)
     end
 end
 
+local function wantsSlide()
+    if love.keyboard.isDown("down", "s") then
+        return true
+    end
+    if gamepad then
+        -- down on the left stick (Y axis is positive downward on most pads)
+        if gamepad:getGamepadAxis("lefty") > GAMEPAD_DEADZONE then
+            return true
+        end
+        -- also support d-pad down, since some players prefer digital input for this
+        if gamepad:isGamepadDown("dpdown") then
+            return true
+        end
+    end
+    return false
+end
+
 local function wantsJump()
     return jumpBufferTimer > 0
 end
@@ -110,7 +140,7 @@ local states = {
             elseif wantsJump() then
                 consumeJump()
                 sm:change("jump")
-            elseif love.keyboard.isDown("down", "s") then
+            elseif wantsSlide() then
                 sm:change("slide")
             elseif horse.vx ~= 0 then
                 sm:change("run")
@@ -127,7 +157,7 @@ local states = {
             elseif wantsJump() then
                 consumeJump()
                 sm:change("jump")
-            elseif love.keyboard.isDown("down", "s") then
+            elseif wantsSlide() then
                 sm:change("slide")
             elseif horse.vx == 0 then
                 sm:change("idle")
@@ -213,7 +243,7 @@ local states = {
 
             if not grounded then
                 sm:change("fall")
-            elseif not love.keyboard.isDown("down", "s") then
+            elseif not wantsSlide() then
                 sm:change(math.abs(horse.vx) > 10 and "run" or "idle")
             end
         end
@@ -252,6 +282,13 @@ function love.update(dt)
     local smoothing = 1 - math.exp(-CAMERA_SMOOTH * dt)
     camera.x = camera.x + (targetX - camera.x) * smoothing
     camera.y = camera.y + (targetY - camera.y) * smoothing
+end
+
+function love.gamepadpressed(joystick, button)
+    gamepad = joystick
+    if button == "a" then
+        jumpBufferTimer = JUMP_BUFFER_TIME
+    end
 end
 
 function love.keypressed(key)
