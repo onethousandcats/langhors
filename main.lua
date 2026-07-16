@@ -27,6 +27,9 @@ local SLIDE_DURATION = 0.4
 local COYOTE_TIME = 0.1
 local JUMP_BUFFER_TIME = 0.12
 
+local camera = { x = 0, y = 0 }
+local CAMERA_SMOOTH = 6
+
 local grounded = false
 local wallDir = 0 -- -1 for left wall, 1 for right wall, 0 for no wall
 
@@ -206,6 +209,9 @@ function love.load()
     world:add(wall2, wall2.x, wall2.y, wall2.w, wall2.h)
 
     sm = StateMachine.new(states, "fall")
+
+    camera.x = horse.x + horse.w / 2 - love.graphics.getWidth() / 2
+    camera.y = horse.y + horse.h / 2 - love.graphics.getHeight() / 2
 end
 
 function love.update(dt)
@@ -217,6 +223,13 @@ function love.update(dt)
     jumpBufferTimer = math.max(jumpBufferTimer - dt, 0)
 
     sm:update(dt)
+
+    local targetX = horse.x + horse.w / 2 - love.graphics.getWidth() / 2
+    local targetY = horse.y + horse.h / 2 - love.graphics.getHeight() / 2
+
+    local smoothing = 1 - math.exp(-CAMERA_SMOOTH * dt)
+    camera.x = camera.x + (targetX - camera.x) * smoothing
+    camera.y = camera.y + (targetY - camera.y) * smoothing
 end
 
 function love.keypressed(key)
@@ -226,6 +239,9 @@ function love.keypressed(key)
 end
 
 function love.draw()
+    love.graphics.push()
+    love.graphics.translate(-camera.x, -camera.y)
+
     love.graphics.setColor(0.3, 0.3, 0.4)
     love.graphics.rectangle("fill", floor.x, floor.y, floor.w, floor.h)
     love.graphics.rectangle("fill", wall.x, wall.y, wall.w, wall.h)
@@ -233,6 +249,8 @@ function love.draw()
 
     love.graphics.setColor(0.85, 0.7, 0.5)
     love.graphics.rectangle("fill", horse.x, horse.y, horse.w, horse.h)
+
+    love.graphics.pop()
 
     love.graphics.setColor(1, 1, 1)
     love.graphics.print("state: " .. sm.current, 10, 10)
