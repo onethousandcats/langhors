@@ -12,9 +12,30 @@ local horse = {
     facing = 1
 }
 
-local floor = { x = 0, y = 500, w = 960, h = 40 }
-local wall = { x = 700, y = 200, w = 24, h = 250 }
-local wall2 = { x = 560, y = 200, w = 24, h = 200 }
+-- Level layout as a flat list of solid rectangles. Everything in here gets
+-- added to the bump world and drawn the same way, so growing the level from
+-- here is just adding entries -- no new named variables needed.
+--
+-- Rough layout (world x-coordinates):
+--   0-400     starting floor
+--   400-550   a pit (tests falling + coyote time if you sprint off the edge)
+--   550-1000  floor continues, with a floating platform above it
+--   1000-1180 a wall-jump corridor: two facing walls with a gap between
+--   1204+     floor continues into a staircase of rising platforms
+local platforms = {
+    { x = 0,    y = 500, w = 400,  h = 40 },  -- starting floor
+    { x = 550,  y = 500, w = 450,  h = 40 },  -- floor after the pit
+    { x = 650,  y = 380, w = 150,  h = 20 },  -- floating platform to jump onto
+
+    { x = 1000, y = 200, w = 24,   h = 200 }, -- wall-jump corridor: left wall
+    { x = 1180, y = 200, w = 24,   h = 300 }, -- wall-jump corridor: right wall
+    { x = 1000, y = 500, w = 204,  h = 40 },  -- floor beneath the corridor
+
+    { x = 1204, y = 500, w = 1000, h = 40 },  -- floor continues after corridor
+    { x = 1400, y = 420, w = 120,  h = 20 },  -- staircase step 1
+    { x = 1600, y = 340, w = 120,  h = 20 },  -- staircase step 2
+    { x = 1800, y = 260, w = 120,  h = 20 },  -- staircase step 3 (top)
+}
 
 local GRAVITY = 1400
 local MOVE_SPEED = 400
@@ -204,9 +225,10 @@ local sm
 function love.load()
     world = bump.newWorld(32)
     world:add(horse, horse.x, horse.y, horse.w, horse.h)
-    world:add(floor, floor.x, floor.y, floor.w, floor.h)
-    world:add(wall, wall.x, wall.y, wall.w, wall.h)
-    world:add(wall2, wall2.x, wall2.y, wall2.w, wall2.h)
+    
+    for _, platform in ipairs(platforms) do
+        world:add(platform, platform.x, platform.y, platform.w, platform.h)
+    end
 
     sm = StateMachine.new(states, "fall")
 
@@ -243,9 +265,9 @@ function love.draw()
     love.graphics.translate(-camera.x, -camera.y)
 
     love.graphics.setColor(0.3, 0.3, 0.4)
-    love.graphics.rectangle("fill", floor.x, floor.y, floor.w, floor.h)
-    love.graphics.rectangle("fill", wall.x, wall.y, wall.w, wall.h)
-    love.graphics.rectangle("fill", wall2.x, wall2.y, wall2.w, wall2.h)
+    for _, platform in ipairs(platforms) do
+        love.graphics.rectangle("fill", platform.x, platform.y, platform.w, platform.h)
+    end
 
     love.graphics.setColor(0.85, 0.7, 0.5)
     love.graphics.rectangle("fill", horse.x, horse.y, horse.w, horse.h)
